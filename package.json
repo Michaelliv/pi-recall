@@ -1,0 +1,45 @@
+{
+  "name": "pi-recall",
+  "version": "0.1.0",
+  "description": "🧠 Recall — BM25 search over every past pi conversation",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      ".pi/extensions/recall"
+    ]
+  },
+  "scripts": {
+    "lint": "biome check .pi/extensions/",
+    "lint:fix": "biome check --write .pi/extensions/",
+    "test": "tsx --test .pi/extensions/recall/*.test.ts",
+    "build-index": "tsx .pi/extensions/recall/build-index.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.14",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.2"
+  },
+  "dependencies": {
+    "minisearch": "^7.1.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Michaelliv/pi-recall.git"
+  },
+  "author": "michaelliv",
+  "license": "MIT"
+}
