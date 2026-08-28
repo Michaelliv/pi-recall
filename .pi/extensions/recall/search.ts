@@ -54,6 +54,7 @@ export function recall(query: string, opts: RecallOptions = {}): RecallHit[] {
     // Stored fields come back directly on the search result.
     const stored = r as unknown as {
       id: number;
+      score: number;
       sessionId: string;
       sessionPath: string;
       cwd: string;
@@ -68,7 +69,7 @@ export function recall(query: string, opts: RecallOptions = {}): RecallHit[] {
     // Recency proxy from file mtime (cached in meta).
     const fileMtime = meta.files[stored.sessionPath]?.mtimeMs ?? minT;
     const recency = (fileMtime - minT) / range;
-    const score = r.score + recency * RECENCY_WEIGHT;
+    const score = stored.score + recency * RECENCY_WEIGHT;
 
     hits.push({
       sessionId: stored.sessionId,

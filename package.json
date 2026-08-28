@@ -1,7 +1,7 @@
 {
   "name": "pi-recall",
   "version": "0.1.0",
-  "description": "🧠 Recall — BM25 search over every past pi conversation",
+  "description": "\ud83e\udde0 Recall \u2014 BM25 search over every past pi conversation",
   "keywords": [
     "pi-package"
   ],
@@ -22,7 +22,7 @@
     "tsx": "^4.19.2"
   },
   "dependencies": {
-    "minisearch": "^7.1.0"
+    "@shiftlabs/ferrosearch": "^0.1.2"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

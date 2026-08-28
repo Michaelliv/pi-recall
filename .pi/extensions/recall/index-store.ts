@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import MiniSearch from "minisearch";
-import type { Meta, TurnDoc } from "./types.js";
+import { FerroSearch } from "@shiftlabs/ferrosearch";
+import type { Meta } from "./types.js";
 
 export const AGENT_DIR =
   process.env.PI_CODING_AGENT_DIR ?? path.join(os.homedir(), ".pi", "agent");
@@ -11,7 +11,7 @@ export const SESSIONS_DIR = path.join(AGENT_DIR, "sessions");
 const INDEX_FILE = path.join(RECALL_DIR, "index.json");
 const META_FILE = path.join(RECALL_DIR, "meta.json");
 
-export const MINISEARCH_OPTS = {
+export const INDEX_OPTS = {
   fields: ["text", "toolNames"],
   storeFields: [
     "sessionId",
@@ -28,12 +28,10 @@ export const MINISEARCH_OPTS = {
     fuzzy: 0.1,
     prefix: true,
   },
-  // MiniSearch's default auto-vacuum runs asynchronously after discard().
-  // A malformed/corrupt session-derived index can then throw outside our
-  // buildIndex() try/catch and take down the whole agent process. Recall is
-  // an opportunistic memory tool, so prefer stale-but-safe over background
-  // mutation. We rebuild changed files by discarding old IDs and saving a
-  // compact serialized index; no background vacuum is worth the crash risk.
+  // No auto-vacuum: file rebuilds discard superseded ids in bulk, and a
+  // vacuum inside every discard would repeat that work. saveIndex runs one
+  // explicit synchronous vacuum instead, so the serialized index never
+  // accumulates discarded documents.
   autoVacuum: false,
 } as const;
 
@@ -63,9 +61,8 @@ function writeAtomic(target: string, data: string) {
   fs.renameSync(tmp, target);
 }
 
-/** In-process cache so repeated tool calls don't reparse 60MB of JSON. */
-let cache: { index: MiniSearch<TurnDoc>; meta: Meta; mtime: number } | null =
-  null;
+/** In-process cache so repeated tool calls don't reload the index. */
+let cache: { index: FerroSearch; meta: Meta; mtime: number } | null = null;
 
 function currentMtime(): number {
   try {
@@ -75,7 +72,7 @@ function currentMtime(): number {
   }
 }
 
-export function loadIndex(): { index: MiniSearch<TurnDoc>; meta: Meta } {
+export function loadIndex(): { index: FerroSearch; meta: Meta } {
   ensureDir();
   const mtime = currentMtime();
   if (cache && cache.mtime === mtime && mtime > 0) {
@@ -83,9 +80,12 @@ export function loadIndex(): { index: MiniSearch<TurnDoc>; meta: Meta } {
   }
   if (fs.existsSync(INDEX_FILE) && fs.existsSync(META_FILE)) {
     try {
-      const index = MiniSearch.loadJSON<TurnDoc>(
+      // Native streaming parse: the index lives in Rust memory, so a
+      // multi-hundred-MB file never inflates the JS heap (the MiniSearch
+      // loadJSON of the same file OOM'd pi at startup).
+      const index = FerroSearch.loadJSON(
         fs.readFileSync(INDEX_FILE, "utf-8"),
-        MINISEARCH_OPTS,
+        INDEX_OPTS,
       );
       const meta: Meta = JSON.parse(fs.readFileSync(META_FILE, "utf-8"));
       cache = { index, meta, mtime };
@@ -96,16 +96,20 @@ export function loadIndex(): { index: MiniSearch<TurnDoc>; meta: Meta } {
     }
   }
   const fresh = {
-    index: new MiniSearch<TurnDoc>(MINISEARCH_OPTS),
+    index: new FerroSearch(INDEX_OPTS),
     meta: emptyMeta(),
   };
   cache = { ...fresh, mtime: 0 };
   return fresh;
 }
 
-export function saveIndex(index: MiniSearch<TurnDoc>, meta: Meta) {
+export function saveIndex(index: FerroSearch, meta: Meta) {
   ensureDir();
-  writeAtomic(INDEX_FILE, JSON.stringify(index));
+  // Synchronous native vacuum, then a single-pass native serialization:
+  // the written index is compact (no discarded documents) and the JS heap
+  // never holds the serialized string's object form.
+  index.vacuum();
+  writeAtomic(INDEX_FILE, index.toJsonString());
   writeAtomic(META_FILE, JSON.stringify(meta));
   cache = { index, meta, mtime: currentMtime() };
 }
